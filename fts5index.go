@@ -18,6 +18,12 @@ import (
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 	"github.com/jaytaylor/html2text"
+	//"github.com/gohugoio/hugo/parser"
+	"github.com/gohugoio/hugo/hugolib"
+	//"github.com/spf13/cast"
+	//"github.com/spf13/afero"
+	"github.com/gohugoio/hugo/hugofs"
+	"github.com/gohugoio/hugo/deps"
 )
 
 const date_fmt = "[02/Jan/2006:15:04:05 -0700]"
@@ -35,6 +41,7 @@ func main() {
 	port := flag.String("p", "localhost:8080", "host address and port to bind to")
 	tmpl_fn := flag.String("template", "", "Go template for the search page")
 	do_html := flag.Bool("html", false, "Index HTML files")
+	do_hugo := flag.Bool("hugo", false, "Index Hugo markdown files")
 	flag.Parse()
 	var err error
 	var f *os.File
@@ -68,7 +75,7 @@ func main() {
 			log.Fatal("Could not check table status ")
 		}
 		if count == 0 {
-			_, err = db.Exec("CREATE VIRTUAL TABLE search USING fts5(path UNINDEXED, title, text)")
+			_, err = db.Exec("CREATE VIRTUAL TABLE search USING fts5(path UNINDEXED, title, text, summary UNINDEXED)")
 			if err != nil {
 				log.Fatal("Could not create search table", err)
 			}
@@ -77,33 +84,18 @@ func main() {
 		log.Fatal("no SQLite index filename supplied")
 	}
 
-	log.Println("indexing...")
-	before := time.Now()
 	if *do_html {
-		index(db, updated,
-			func(path string)bool {
-				fn := strings.ToLower(path)
-				return strings.HasSuffix(fn, ".html") || strings.HasSuffix(fn, ".htm")
-			},
-			func(path string) (string, string, error) {
-				f, err := os.Open(path)
-				if err != nil {
-					return "", "", err
-				}
-				html_doc, err := html.Parse(f)
-				if err != nil {
-					return "", "", err
-				}
-				f.Close()
-				title := extract_title(html_doc)
-				text, err := html2text.FromHTMLNode(html_doc)
-				if err != nil {
-					return "", "", err
-				}
-				return title, text, nil
-			})
+		before := time.Now()
+		log.Println("indexing HTML...")
+		index_html(db, updated)
+		log.Println("done in", time.Now().Sub(before))
 	}
-	log.Println("done in", time.Now().Sub(before))
+	if *do_hugo {
+		before := time.Now()
+		log.Println("indexing Hugo...")
+		index_hugo(db, updated)
+		log.Println("done in", time.Now().Sub(before))
+	}
 	
 	if *tmpl_fn != "" {
 		tmpl, err := template.ParseFiles(*tmpl_fn)
@@ -129,7 +121,7 @@ func extract_title(n *html.Node) string {
 	return ""
 }
 
-func index(db *sql.DB, updated time.Time, fn_filter func(string)bool, fn_title_text func(string) (string, string, error)) {
+func index_html(db *sql.DB, updated time.Time) {
 	stmt, err := db.Prepare("INSERT OR REPLACE INTO search (path, title, text) VALUES (?, ?, ?)")
 	if err != nil {
 		log.Fatal("Could not prepare insert statement", err)
@@ -140,7 +132,8 @@ func index(db *sql.DB, updated time.Time, fn_filter func(string)bool, fn_title_t
 		if err != nil {
 			return err
 		}
-		if ! fn_filter(path) {
+		fn := strings.ToLower(path)
+		if !(strings.HasSuffix(fn, ".html") || strings.HasSuffix(fn, ".htm")) {
 			return nil
 		}
 		stat, err := os.Stat(path)
@@ -150,7 +143,18 @@ func index(db *sql.DB, updated time.Time, fn_filter func(string)bool, fn_title_t
 		if *verbose {
 			fmt.Println(path);
 		}
-		title, text, err := fn_title_text(path)
+		f, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		html_doc, err := html.Parse(f)
+		if err != nil {
+			return err
+		}
+		f.Close()
+		title := extract_title(html_doc)
+		text, err := html2text.FromHTMLNode(html_doc)
 		if err != nil {
 			return err
 		}
@@ -163,6 +167,50 @@ func index(db *sql.DB, updated time.Time, fn_filter func(string)bool, fn_title_t
 		_, err = stmt.Exec(path, title, text)
 		return err
 	})
+	stmt.Close()
+}
+
+func index_hugo(db *sql.DB, updated time.Time) {
+	stmt, err := db.Prepare("INSERT OR REPLACE INTO search (path, title, text, summary) VALUES (?, ?, ?, ?)")
+	if err != nil {
+		log.Fatal("Could not prepare insert statement", err)
+	}
+
+	osFs := hugofs.Os
+	cfg, err := hugolib.LoadConfig(osFs, "", "config.toml")
+	if err != nil {
+		log.Fatal("Could not load Hugo config.toml", err)
+	}
+	fs := hugofs.NewFrom(osFs, cfg)
+	sites, err := hugolib.NewHugoSites(deps.DepsCfg{Fs: fs, Cfg: cfg})
+	if err != nil {
+		log.Fatal("Could not load Hugo site(s)", err)
+	}
+	err =sites.Build(hugolib.BuildCfg{SkipRender: true})
+	if err != nil {
+		log.Fatal("Could not run render", err)
+	}
+	for _, p := range sites.Pages() {
+		if p.IsDraft() || p.IsFuture() || p.IsExpired() {
+			continue
+		}
+		title := p.Title
+		path := p.Permalink()
+		text, err := html2text.FromString(string(p.Content))
+		if err != nil {
+			log.Fatal("Could not convert Hugo content to text", err)
+		}
+		if *verbose {
+			fmt.Println(path)
+		 	fmt.Println("\t", title);
+		 	//fmt.Println("\t", p.Summary);
+			fmt.Println()
+		}
+		_, err = stmt.Exec(path, title, text, p.Summary)
+	if err != nil {
+		log.Fatal("Could not write page to DB", err)
+	}
+	}
 	stmt.Close()
 }
 
