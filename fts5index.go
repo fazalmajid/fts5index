@@ -38,7 +38,7 @@ func main() {
 	verbose = flag.Bool("v", false, "Verbose error reporting")
 	cpuprofile := flag.String("cpuprofile", "", "write cpu profile to file")
 	dsn := flag.String("db", "search.db", "SQLite DB to use for the search index")
-	port := flag.String("p", "localhost:8080", "host address and port to bind to")
+	port := flag.String("p", "localhost:8086", "host address and port to bind to")
 	tmpl_fn := flag.String("template", "", "Go template for the search page")
 	do_html := flag.Bool("html", false, "Index HTML files")
 	do_hugo := flag.Bool("hugo", false, "Index Hugo markdown files")
@@ -216,6 +216,7 @@ func index_hugo(db *sql.DB, updated time.Time) {
 
 type Result struct {
 	Path string
+	Title string
 	Summary string
 	Text string
 }
@@ -232,6 +233,14 @@ func do_error(w http.ResponseWriter, msg string) {
   </body>
 </html>
 `, msg))
+}
+
+func min(a int, b int) int {
+	if a < b {
+		return a
+	} else {
+		return b
+	}
 }
 
 func serve(db *sql.DB, port string, tmpl *template.Template) {
@@ -252,21 +261,21 @@ func serve(db *sql.DB, port string, tmpl *template.Template) {
 			do_error(w, "Malformed search terms.")
 			return
 		}
-		rows, err := db.Query("SELECT path, title, text FROM search WHERE search=" + term)
+		rows, err := db.Query("SELECT path, title, summary, text FROM search WHERE search=" + term)
 		if err != nil {
 			do_error(w, "Query error: " + err.Error())
 			return
 		}
 		results := make([]Result, 10)
 		for rows.Next() {
-			var path, title, text string
-			err = rows.Scan(&path, &title, &text)
+			var path, title, summary, text string
+			err = rows.Scan(&path, &title, &summary, &text)
 			if err != nil {
 				do_error(w, "Row error: " + err.Error())
 				return
 			}
-			results = append(results, Result{path, title, text})
-			log.Printf("query %q result\n\t%s\n\t%s\n", term, path, text[:72])
+			results = append(results, Result{path, title, summary, text})
+			log.Printf("query %q result\n\t%s\n\t%s\n", term, path, text[:min(len(text), 72)])
 		}
 		data := make(map[string]interface{}, 1)
 		data["Results"] = results
@@ -277,5 +286,8 @@ func serve(db *sql.DB, port string, tmpl *template.Template) {
 		}
 	}
 	http.HandleFunc("/search", SearchHandler)
+	if *verbose {
+		log.Println("starting web server on ", port)
+	}
 	log.Fatal(http.ListenAndServe(port, nil))
 }
