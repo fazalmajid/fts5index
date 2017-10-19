@@ -10,9 +10,7 @@ https://www.sqlite.org/aff_short.html
 
 ### Installation
 
-To build `fts5index` from source, run:
-
-    env GOPATH=`pwd` go get -f -t -u -v github.com/fazalmajid/fts5index
+To build `fts5index` from source, run `make` in this directory.
 
 copy `bin/fts5index` somewhere in your `$PATH`.
 
