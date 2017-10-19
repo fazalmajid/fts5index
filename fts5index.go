@@ -217,7 +217,7 @@ func index_hugo(db *sql.DB, updated time.Time) {
 type Result struct {
 	Path string
 	Title string
-	Summary string
+	Summary template.HTML
 	Text string
 }
 
@@ -266,7 +266,7 @@ func serve(db *sql.DB, port string, tmpl *template.Template) {
 			do_error(w, "Query error: " + err.Error())
 			return
 		}
-		results := make([]Result, 10)
+		results := make([]Result, 0)
 		for rows.Next() {
 			var path, title, summary, text string
 			err = rows.Scan(&path, &title, &summary, &text)
@@ -274,7 +274,7 @@ func serve(db *sql.DB, port string, tmpl *template.Template) {
 				do_error(w, "Row error: " + err.Error())
 				return
 			}
-			results = append(results, Result{path, title, summary, text})
+			results = append(results, Result{path, title, template.HTML(summary), text})
 			log.Printf("query %q result\n\t%s\n\t%s\n", term, path, text[:min(len(text), 72)])
 		}
 		data := make(map[string]interface{}, 1)
