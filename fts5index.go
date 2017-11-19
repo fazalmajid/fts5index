@@ -3,27 +3,27 @@ package main
 import (
 	"database/sql"
 	"flag"
-	"log"
-	"os"
-	"runtime/pprof"
-	"path/filepath"
 	"fmt"
-	"strings"
-	"net/http"
-	"time"
-	"io"
 	"html/template"
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"path/filepath"
+	"runtime/pprof"
+	"strings"
+	"time"
 
+	"github.com/jaytaylor/html2text"
 	_ "github.com/mattn/go-sqlite3"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
-	"github.com/jaytaylor/html2text"
 	//"github.com/gohugoio/hugo/parser"
 	"github.com/gohugoio/hugo/hugolib"
 	//"github.com/spf13/cast"
 	//"github.com/spf13/afero"
-	"github.com/gohugoio/hugo/hugofs"
 	"github.com/gohugoio/hugo/deps"
+	"github.com/gohugoio/hugo/hugofs"
 )
 
 const date_fmt = "[02/Jan/2006:15:04:05 -0700]"
@@ -62,7 +62,7 @@ func main() {
 		if err == nil {
 			updated = stat.ModTime()
 		}
-		
+
 		db, err = sql.Open("sqlite3", *dsn)
 		if err != nil {
 			log.Fatalf("ERROR: opening SQLite DB %q, error: %s", *dsn, err)
@@ -96,7 +96,7 @@ func main() {
 		index_hugo(db, updated)
 		log.Println("done in", time.Now().Sub(before))
 	}
-	
+
 	if *tmpl_fn != "" {
 		tmpl, err := template.ParseFiles(*tmpl_fn)
 		if err != nil {
@@ -141,7 +141,7 @@ func index_html(db *sql.DB, updated time.Time) {
 			return nil
 		}
 		if *verbose {
-			fmt.Println(path);
+			fmt.Println(path)
 		}
 		f, err := os.Open(path)
 		if err != nil {
@@ -159,7 +159,7 @@ func index_html(db *sql.DB, updated time.Time) {
 			return err
 		}
 		if *verbose {
-		 	fmt.Println("\t", title);
+			fmt.Println("\t", title)
 		}
 		// if *verbose {
 		// 	fmt.Println(text);
@@ -186,7 +186,7 @@ func index_hugo(db *sql.DB, updated time.Time) {
 	if err != nil {
 		log.Fatal("Could not load Hugo site(s)", err)
 	}
-	err =sites.Build(hugolib.BuildCfg{SkipRender: true})
+	err = sites.Build(hugolib.BuildCfg{SkipRender: true})
 	if err != nil {
 		log.Fatal("Could not run render", err)
 	}
@@ -202,26 +202,29 @@ func index_hugo(db *sql.DB, updated time.Time) {
 		}
 		if *verbose {
 			fmt.Println(path)
-		 	fmt.Println("\t", title);
-		 	//fmt.Println("\t", p.Summary);
+			fmt.Println("\t", title)
+			//fmt.Println("\t", p.Summary);
 			fmt.Println()
 		}
 		_, err = stmt.Exec(path, title, text, p.Summary)
-	if err != nil {
-		log.Fatal("Could not write page to DB", err)
-	}
+		if err != nil {
+			log.Fatal("Could not write page to DB", err)
+		}
 	}
 	stmt.Close()
 }
 
 type Result struct {
-	Path string
-	Title string
+	Path    string
+	Title   string
 	Summary template.HTML
-	Text string
+	Text    string
 }
 
-func do_error(w http.ResponseWriter, msg string) {
+func do_error(w http.ResponseWriter, msg string, query string) {
+	if query != "" {
+		log.Println("query error:", query, msg)
+	}
 	io.WriteString(w, fmt.Sprintf(`<!doctype html>
 <html>
   <head>
@@ -244,26 +247,30 @@ func min(a int, b int) int {
 }
 
 func serve(db *sql.DB, port string, tmpl *template.Template) {
-	SearchHandler := func (w http.ResponseWriter, r *http.Request) {
+	SearchHandler := func(w http.ResponseWriter, r *http.Request) {
 		err := r.ParseForm()
 		if err != nil {
-			do_error(w, "Could not parse search form.")
+			do_error(w, "Could not parse search form.", "")
 			return
 		}
 		raw_term := r.Form.Get("q")
-		
+
 		if raw_term == "" {
-			do_error(w, "Please enter search terms.")
+			do_error(w, "Please enter search terms.", "")
 			return
 		}
 		term, err := fts5_term(raw_term)
 		if err != nil {
-			do_error(w, "Malformed search terms.")
+			do_error(w, "Malformed search terms.", "")
 			return
 		}
-		rows, err := db.Query("SELECT path, title, summary, text FROM search WHERE search=" + term)
+		query := "SELECT path, title, summary, text FROM search WHERE search=?"
+		if *verbose {
+			log.Println("Query: ", query, term)
+		}
+		rows, err := db.Query(query, term)
 		if err != nil {
-			do_error(w, "Query error: " + err.Error())
+			do_error(w, "Query error: "+err.Error(), term)
 			return
 		}
 		results := make([]Result, 0)
@@ -271,7 +278,7 @@ func serve(db *sql.DB, port string, tmpl *template.Template) {
 			var path, title, summary, text string
 			err = rows.Scan(&path, &title, &summary, &text)
 			if err != nil {
-				do_error(w, "Row error: " + err.Error())
+				do_error(w, "Row error: "+err.Error(), term)
 				return
 			}
 			results = append(results, Result{path, title, template.HTML(summary), text})
@@ -281,7 +288,7 @@ func serve(db *sql.DB, port string, tmpl *template.Template) {
 		data["Results"] = results
 		err = tmpl.Execute(w, data)
 		if err != nil {
-			do_error(w, "Template error: " + err.Error())
+			do_error(w, "Template error: "+err.Error(), query)
 			return
 		}
 	}
