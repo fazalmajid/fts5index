@@ -10,6 +10,7 @@ fts5index: $(DEPS) fts5index.go fts5query.go
 	$(GO) build  --tags fts5 fts5index.go fts5query.go
 
 src/github.com/mattn/go-sqlite3:
+	env CGO_CFLAGS=-D__EXTENSIONS__=1 \
 	$(GO) get -f -t -u -v --tags fts5 github.com/mattn/go-sqlite3
 
 src/github.com/jaytaylor/html2text:
