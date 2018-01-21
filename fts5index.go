@@ -194,7 +194,7 @@ func index_hugo(db *sql.DB, updated time.Time) {
 		if p.IsDraft() || p.IsFuture() || p.IsExpired() {
 			continue
 		}
-		title := p.Title
+		title := p.Title()
 		path := p.Permalink()
 		text, err := html2text.FromString(string(p.Content))
 		if err != nil {
@@ -208,6 +208,7 @@ func index_hugo(db *sql.DB, updated time.Time) {
 		}
 		_, err = stmt.Exec(path, title, text, p.Summary)
 		if err != nil {
+			log.Println("path = ", path, "title = ", title, "text = ", text, "summary = ", p.Summary)
 			log.Fatal("Could not write page to DB", err)
 		}
 	}
