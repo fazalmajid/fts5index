@@ -20,6 +20,7 @@ import (
 	"golang.org/x/net/html/atom"
 	//"github.com/gohugoio/hugo/parser"
 	"github.com/gohugoio/hugo/hugolib"
+	"github.com/gohugoio/hugo/resources/resource"
 	//"github.com/spf13/cast"
 	//"github.com/spf13/afero"
 	"github.com/gohugoio/hugo/deps"
@@ -177,7 +178,7 @@ func index_hugo(db *sql.DB, updated time.Time) {
 	}
 
 	osFs := hugofs.Os
-	cfg, err := hugolib.LoadConfig(osFs, "", "config.toml")
+	cfg, err := hugolib.LoadConfigDefault(osFs)
 	if err != nil {
 		log.Fatal("Could not load Hugo config.toml", err)
 	}
@@ -191,15 +192,12 @@ func index_hugo(db *sql.DB, updated time.Time) {
 		log.Fatal("Could not run render", err)
 	}
 	for _, p := range sites.Pages() {
-		if p.IsDraft() || p.IsFuture() || p.IsExpired() {
+		if p.Draft() || resource.IsFuture(p) || resource.IsExpired(p) {
 			continue
 		}
 		title := p.Title()
 		path := p.Permalink()
-		text, err := html2text.FromString(string(p.Content))
-		if err != nil {
-			log.Fatal("Could not convert Hugo content to text", err)
-		}
+		text := p.Plain()
 		if *verbose {
 			fmt.Println(path)
 			fmt.Println("\t", title)
