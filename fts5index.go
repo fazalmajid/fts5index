@@ -197,17 +197,33 @@ func index_hugo(db *sql.DB, updated time.Time) {
 		}
 		title := p.Title()
 		path := p.Permalink()
-		text := p.Plain()
+		content, err := p.Content()
+		html_src, ok := content.(template.HTML)
+		if !ok {
+			if *verbose {
+				log.Println("Could not get HTML for: ", path, content)
+			}
+			continue
+		}
+		html_doc, err := html.Parse(strings.NewReader(string(html_src)))
+		if err != nil {
+			log.Fatal("Invalid HTML: ", path, err)
+		}
+		//log.Println("HTML content", path, html_src)
+		text, err := html2text.FromHTMLNode(html_doc)
+		if err != nil {
+			log.Fatal("Could not load content for: ", path, err)
+		}
 		if *verbose {
 			fmt.Println(path)
 			fmt.Println("\t", title)
 			//fmt.Println("\t", p.Summary);
 			fmt.Println()
 		}
-		_, err = stmt.Exec(path, title, text, p.Summary)
+		_, err = stmt.Exec(path, title, text, p.Summary())
 		if err != nil {
-			log.Println("path = ", path, "title = ", title, "text = ", text, "summary = ", p.Summary)
-			log.Fatal("Could not write page to DB", err)
+			log.Println("path = ", path, "title = ", title, "text = ", text, "summary = ", p.Summary())
+			log.Fatal("Could not write page to DB: ", err)
 		}
 	}
 	stmt.Close()
