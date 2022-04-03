@@ -73,12 +73,12 @@ func main() {
 		var count int32
 		err = row.Scan(&count)
 		if err != nil {
-			log.Fatal("Could not check table status ")
+			log.Fatal("Could not check table status: ", err)
 		}
 		if count == 0 {
 			_, err = db.Exec("CREATE VIRTUAL TABLE search USING fts5(path UNINDEXED, title, text, summary UNINDEXED)")
 			if err != nil {
-				log.Fatal("Could not create search table", err)
+				log.Fatal("Could not create search table: ", err)
 			}
 		}
 	} else {
@@ -101,7 +101,7 @@ func main() {
 	if *tmpl_fn != "" {
 		tmpl, err := template.ParseFiles(*tmpl_fn)
 		if err != nil {
-			log.Fatal("Could not load template:", *tmpl_fn, ":", err)
+			log.Fatal("Could not load template: ", *tmpl_fn, ": ", err)
 		}
 		serve(db, *port, tmpl)
 	}
@@ -125,7 +125,7 @@ func extract_title(n *html.Node) string {
 func index_html(db *sql.DB, updated time.Time) {
 	stmt, err := db.Prepare("INSERT OR REPLACE INTO search (path, title, text) VALUES (?, ?, ?)")
 	if err != nil {
-		log.Fatal("Could not prepare insert statement", err)
+		log.Fatal("Could not prepare insert statement: ", err)
 	}
 
 	// walk the current directory looking for HTML files
@@ -174,22 +174,22 @@ func index_html(db *sql.DB, updated time.Time) {
 func index_hugo(db *sql.DB, updated time.Time) {
 	stmt, err := db.Prepare("INSERT OR REPLACE INTO search (path, title, text, summary) VALUES (?, ?, ?, ?)")
 	if err != nil {
-		log.Fatal("Could not prepare insert statement", err)
+		log.Fatal("Could not prepare insert statement: ", err)
 	}
 
 	osFs := hugofs.Os
 	cfg, err := hugolib.LoadConfigDefault(osFs)
 	if err != nil {
-		log.Fatal("Could not load Hugo config.toml", err)
+		log.Fatal("Could not load Hugo config.toml: ", err)
 	}
 	fs := hugofs.NewFrom(osFs, cfg)
 	sites, err := hugolib.NewHugoSites(deps.DepsCfg{Fs: fs, Cfg: cfg})
 	if err != nil {
-		log.Fatal("Could not load Hugo site(s)", err)
+		log.Fatal("Could not load Hugo site(s): ", err)
 	}
 	err = sites.Build(hugolib.BuildCfg{SkipRender: true})
 	if err != nil {
-		log.Fatal("Could not run render", err)
+		log.Fatal("Could not run render: ", err)
 	}
 	for _, p := range sites.Pages() {
 		if p.Draft() || resource.IsFuture(p) || resource.IsExpired(p) {
