@@ -178,9 +178,18 @@ func index_hugo(db *sql.DB, updated time.Time) {
 	}
 
 	osFs := hugofs.Os
-	cfg, err := hugolib.LoadConfigDefault(osFs)
+	//cfg, err := hugolib.LoadConfigDefault(osFs)
+	cwd, _ := os.Getwd()
+	cfg, _, err := hugolib.LoadConfig(
+		hugolib.ConfigSourceDescriptor{
+			Fs:         osFs,
+			Filename:   "config.toml",
+			Path:       cwd,
+			WorkingDir: cwd,
+		})
 	if err != nil {
-		log.Fatal("Could not load Hugo config.toml: ", err)
+		wd, _ := os.Getwd()
+		log.Fatal("Could not load Hugo config.toml (cwd=", wd, "): ", err)
 	}
 	fs := hugofs.NewFrom(osFs, cfg)
 	sites, err := hugolib.NewHugoSites(deps.DepsCfg{Fs: fs, Cfg: cfg})
