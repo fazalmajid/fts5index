@@ -4,6 +4,11 @@ import (
 	"errors"
 )
 
+const (
+	NONE = '\000'
+	WS   = '\001' // ASCII SOH standing in for WS word separator
+)
+
 // Convert a Google search like query into a FTS5 query, i.e. to not
 // trigger the column filter misfeature. We don't try to make invalid queries
 // work, just make queries that would be interpreted as column filters or the
@@ -27,20 +32,30 @@ func fts5_term(term string) (string, error) {
 	expect := '\000'
 	pending := ""
 	for _, c := range term {
-		switch {
-		case c == '\'': // SQL injection guard
+		if c == '\'' { // SQL injection guard
 			if pending != "" {
+				if !implicit_q {
+					out = out + "\""
+					implicit_q = true
+				}
 				out = out + pending
 				pending = ""
 			}
 			out = out + "''"
-		case expect != '\000':
-			if c != expect {
-				if in_q {
-					return "", errors.New("query parse error 1")
-				}
-				out = out + "\"" + pending + "\"" + string(c)
-				expect = '\000'
+			continue
+		}
+		if expect != NONE {
+			if in_q {
+				return "", errors.New("query parse error 1")
+			}
+			if (expect == WS && (c != ' ' && c != '\t' && c != '\n' && c != '(' && c != '"')) || (expect != WS && c != expect) {
+				out = out + "\"" + pending
+				implicit_q = true
+				expect = NONE
+				pending = ""
+			} else if expect == WS {
+				out = out + pending
+				expect = NONE
 				pending = ""
 			} else {
 				pending = pending + string(c)
@@ -50,24 +65,22 @@ func fts5_term(term string) (string, error) {
 				case 'O':
 					expect = 'T'
 				case 'D', 'R', 'T':
-					if in_q {
-						return "", errors.New("query parse error 2")
-					}
-					expect = '\000'
-					out = out + pending
-					pending = ""
+					expect = WS
 				default:
 					return "", errors.New("query parse error 3")
 				}
+				continue
 			}
-		case c == '"':
+		}
+		if c == '"' {
 			if implicit_q {
 				implicit_q = false
+				in_q = true
 			} else {
 				in_q = !in_q
+				out = out + string(c)
 			}
-			out = out + string(c)
-		case !in_q && (c == 'A' || c == 'O' || c == 'N'):
+		} else if !in_q && !implicit_q && (c == 'A' || c == 'O' || c == 'N') {
 			// start of AND, OR or NOT
 			switch c {
 			case 'A':
@@ -76,17 +89,19 @@ func fts5_term(term string) (string, error) {
 				expect = 'R'
 			case 'N':
 				expect = 'O'
+			default:
+				return "", errors.New("query parse error 4")
 			}
 			pending = string(c)
-		case c == ' ', c == '\t', c == '\n', c == '(', c == ')':
+		} else if c == ' ' || c == '\t' || c == '\n' || c == '(' || c == ')' {
 			if implicit_q {
 				out = out + "\""
 				implicit_q = false
 				in_q = false
 			}
 			out = out + string(c)
-		default:
-			if in_q {
+		} else {
+			if in_q || implicit_q {
 				out = out + string(c)
 			} else {
 				in_q = true
@@ -96,7 +111,7 @@ func fts5_term(term string) (string, error) {
 		}
 	}
 	out = out + pending
-	if in_q {
+	if in_q || implicit_q {
 		out = out + "\""
 	}
 	return out, nil

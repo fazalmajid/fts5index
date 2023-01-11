@@ -15,6 +15,14 @@ var fts5_tests = []struct {
 	{"(foo AND bar) OR baz", "(\"foo\" AND \"bar\") OR \"baz\""},
 	{"foo AN bar", "\"foo\" \"AN\" \"bar\""},
 	{"\"foo AN bar\"", "\"foo AN bar\""},
+	{"ACME", "\"ACME\""},
+	{"Acme", "\"Acme\""},
+	{"OpenBSD", "\"OpenBSD\""},
+	{"ANAN", "\"ANAN\""},
+	{"ANAND", "\"ANAND\""},
+	{"AN\"D\"", "\"AND\""},
+	{"NOTAM", "\"NOTAM\""},
+	{"ANDROS", "\"ANDROS\""},
 }
 
 func TestFTS5(t *testing.T) {
