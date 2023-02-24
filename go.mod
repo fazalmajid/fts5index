@@ -6,7 +6,7 @@ require (
 	github.com/gohugoio/hugo v0.110.0
 	github.com/jaytaylor/html2text v0.0.0-20211105163654-bc68cce691ba
 	github.com/mattn/go-sqlite3 v1.14.12
-	golang.org/x/net v0.3.0
+	golang.org/x/net v0.7.0
 )
 
 require (
@@ -73,7 +73,7 @@ require (
 	go.uber.org/atomic v1.10.0 // indirect
 	golang.org/x/image v0.5.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
-	golang.org/x/sys v0.3.0 // indirect
+	golang.org/x/sys v0.5.0 // indirect
 	golang.org/x/text v0.7.0 // indirect
 	golang.org/x/tools v0.4.0 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
