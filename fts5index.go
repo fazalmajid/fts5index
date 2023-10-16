@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"flag"
 	"fmt"
@@ -20,6 +21,8 @@ import (
 	"golang.org/x/net/html/atom"
 	//"github.com/gohugoio/hugo/parser"
 	"github.com/gohugoio/hugo/hugolib"
+	"github.com/gohugoio/hugo/config"
+	"github.com/gohugoio/hugo/config/allconfig"
 	"github.com/gohugoio/hugo/resources/resource"
 	//"github.com/spf13/cast"
 	//"github.com/spf13/afero"
@@ -57,6 +60,7 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
+	ctx := context.TODO()
 	var updated time.Time
 	if *dsn != "" {
 		stat, err := os.Stat(*dsn)
@@ -94,7 +98,7 @@ func main() {
 	if *do_hugo {
 		before := time.Now()
 		log.Println("indexing Hugo...")
-		index_hugo(db, updated)
+		index_hugo(ctx, db, updated)
 		log.Println("done in", time.Now().Sub(before))
 	}
 
@@ -171,7 +175,7 @@ func index_html(db *sql.DB, updated time.Time) {
 	stmt.Close()
 }
 
-func index_hugo(db *sql.DB, updated time.Time) {
+func index_hugo(ctx context.Context, db *sql.DB, updated time.Time) {
 	stmt, err := db.Prepare("INSERT OR REPLACE INTO search (path, title, text, summary) VALUES (?, ?, ?, ?)")
 	if err != nil {
 		log.Fatal("Could not prepare insert statement: ", err)
@@ -179,20 +183,27 @@ func index_hugo(db *sql.DB, updated time.Time) {
 
 	osFs := hugofs.Os
 	//cfg, err := hugolib.LoadConfigDefault(osFs)
-	cwd, _ := os.Getwd()
-	cfg, _, err := hugolib.LoadConfig(
-		hugolib.ConfigSourceDescriptor{
+	configs, err := allconfig.LoadConfig(
+		allconfig.ConfigSourceDescriptor{
 			Fs:         osFs,
 			Filename:   "config.toml",
-			Path:       cwd,
-			WorkingDir: cwd,
+			//Path:       cwd,
+			//WorkingDir: cwd,
 		})
 	if err != nil {
 		wd, _ := os.Getwd()
 		log.Fatal("Could not load Hugo config.toml (cwd=", wd, "): ", err)
 	}
-	fs := hugofs.NewFrom(osFs, cfg)
-	sites, err := hugolib.NewHugoSites(deps.DepsCfg{Fs: fs, Cfg: cfg})
+	base := configs.Base
+	// XXX fs := hugofs.NewDefault(cfg)
+	cfg := config.New()
+	cfg.Set("publishDir", base.PublishDir)
+	cfg.Set("publishDirStatic", base.PublishDir)
+	cfg.Set("publishDirDynamic", base.PublishDir)
+	cwd, _ := os.Getwd()
+	cfg.Set("workingDir", cwd)
+	fs := hugofs.NewDefaultOld(cfg)
+	sites, err := hugolib.NewHugoSites(deps.DepsCfg{Fs: fs, Configs: configs})
 	if err != nil {
 		log.Fatal("Could not load Hugo site(s): ", err)
 	}
@@ -206,7 +217,7 @@ func index_hugo(db *sql.DB, updated time.Time) {
 		}
 		title := p.Title()
 		path := p.Permalink()
-		content, err := p.Content()
+		content, err := p.Content(ctx)
 		html_src, ok := content.(template.HTML)
 		if !ok {
 			if *verbose {
@@ -229,9 +240,9 @@ func index_hugo(db *sql.DB, updated time.Time) {
 			//fmt.Println("\t", p.Summary);
 			fmt.Println()
 		}
-		_, err = stmt.Exec(path, title, text, p.Summary())
+		_, err = stmt.Exec(path, title, text, p.Summary(ctx))
 		if err != nil {
-			log.Println("path = ", path, "title = ", title, "text = ", text, "summary = ", p.Summary())
+			log.Println("path = ", path, "title = ", title, "text = ", text, "summary = ", p.Summary(ctx))
 			log.Fatal("Could not write page to DB: ", err)
 		}
 	}
