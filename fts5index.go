@@ -20,9 +20,9 @@ import (
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 	//"github.com/gohugoio/hugo/parser"
-	"github.com/gohugoio/hugo/hugolib"
 	"github.com/gohugoio/hugo/config"
 	"github.com/gohugoio/hugo/config/allconfig"
+	"github.com/gohugoio/hugo/hugolib"
 	"github.com/gohugoio/hugo/resources/resource"
 	//"github.com/spf13/cast"
 	//"github.com/spf13/afero"
@@ -185,8 +185,8 @@ func index_hugo(ctx context.Context, db *sql.DB, updated time.Time) {
 	//cfg, err := hugolib.LoadConfigDefault(osFs)
 	configs, err := allconfig.LoadConfig(
 		allconfig.ConfigSourceDescriptor{
-			Fs:         osFs,
-			Filename:   "config.toml",
+			Fs:       osFs,
+			Filename: "config.toml",
 			//Path:       cwd,
 			//WorkingDir: cwd,
 		})
@@ -202,7 +202,7 @@ func index_hugo(ctx context.Context, db *sql.DB, updated time.Time) {
 	cfg.Set("publishDirDynamic", base.PublishDir)
 	cwd, _ := os.Getwd()
 	cfg.Set("workingDir", cwd)
-	fs := hugofs.NewDefaultOld(cfg)
+	fs := hugofs.NewDefault(cfg)
 	sites, err := hugolib.NewHugoSites(deps.DepsCfg{Fs: fs, Configs: configs})
 	if err != nil {
 		log.Fatal("Could not load Hugo site(s): ", err)
